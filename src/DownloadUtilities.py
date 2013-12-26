@@ -13,6 +13,10 @@ from bs4 import BeautifulSoup 								#Third party imports #TODO make this an in
 from OnlineTV import AlreadyDownloaded, Episode, TV_Show 	# Imports from this project
 import MyThreads					
 
+RUN_DIR = "../run/"
+LOG_DIR = "../run/log/"
+DOWNLOAD_DIR = "../run/Downloads/"
+
 ########## 		Exceptions 					##########
 class InvalidStatusCode(Exception):
 	"""Exception raised by DownloadUtilities.grabUrl()
@@ -77,7 +81,7 @@ class DownloadUtilities:
 		with urllib.request.urlopen(req) as response:
 			html = response.read().decode(self.encoding, 'ignore')
 		
-		with open('log/TVWatchlist.html', 'w') as debugOut:
+		with open(LOG_DIR + 'TVWatchlist.html', 'w') as debugOut:
 			debugOut.write(html)
 		
 		### Now process our results and get show names ###
@@ -278,7 +282,7 @@ class DownloadUtilities:
 		MULTITHREAD"""
 		
 		self.out.addBody('\rDownloading the queue...')
-		video_format = 'Downloads/{0}/S{1:>02}_E{2:>02}--{3}'							# Format string for the file name we will store
+		video_format = DOWNLOAD_DIR + '{0}/S{1:>02}_E{2:>02}--{3}'							# Format string for the file name we will store
 		
 		for show in download_queue:														
 			for ind in show.to_download:											# For each episode that has download links...
@@ -383,7 +387,7 @@ class DownloadUtilities:
 		self.out.addBody(message)
 		self.log.success(message)
 		
-		with open('completed.txt','a') as stream:
+		with open(RUN_DIR + 'completed.txt','a') as stream:
 			stream.write(video_filename + '\n')
 		
 		return True

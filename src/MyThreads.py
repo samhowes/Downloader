@@ -17,6 +17,7 @@ import Interface					# Imports from this project
 
 import pydevd
 
+FAIL_DIR = "../run/failed/"
 
 class BadQMessage(Exception):
 	"""An exception for InterfaceThread to say that it got an invalid task request in its queue."""
@@ -45,6 +46,7 @@ class Output:
 		if noLog == None:
 			self.log = Log()
 		self.messageQ = messageQ
+	
 	def updateStatus(self, newStatus):
 		self.messageQ.put(('SetFooter', (newStatus,)))
 		try:
@@ -56,9 +58,18 @@ class Output:
 		self.messageQ.put(('SetTitle', (newTitle,)))
 	
 	def addBody(self, newBody):
-		self.messageQ.put(('AddBody', (newBody,)))
+		screen = None; log = None
+		output = newBody.split('$!', 1)
+		
+		if len(output) == 2:
+			screen = output[0]
+			log = output[1]
+		else:
+			screen = output[0]
+			
+		self.messageQ.put(('AddBody', (screen,)))
 		try:
-			self.log.debug(newBody)
+			self.log.debug(screen + str(log))
 		except NameError:
 			pass
 		
@@ -358,10 +369,13 @@ class InfoThread(threading.Thread):
 		while True:
 			try:
 				show = self.mainQ.get(False)
+				show_html = self.grabUrl(show.href, 200)										# First get the show's homepage
+			
 			except queue.Empty:
 				break 	
-			
-			show_html = self.grabUrl(show.href, 200)										# First get the show's homepage
+			except UrlRedirected:
+				self.messageQ.put(('Error', 'Show %s homepage broken on Primewire' % (show.title)))
+				continue				
 				
 			show_soup = BeautifulSoup(show_html)							  				# First extract the link for the episode that we want
 			episodes_container = show_soup.find('div', class_='actual_tab', id='first') 	# Get the container of all the episodes
@@ -380,7 +394,7 @@ class InfoThread(threading.Thread):
 				episode.name = anchor.text.split(' - ')[-1].strip()							# Record the name: the text was 'Episode x	 - <name>\n' so we extract <name> and strip trailing whitespace
 				episode.href = show.base_url + anchor['href']								# Record the streaming page found
 					
-				self.messageQ.put(('Body', 'Finding download links for: "%s": "%s", at "%s"' % 
+				self.messageQ.put(('Body', 'Finding download links for: "%s": "%s"$!, at "%s"' % 
 								(show.title, episode.name, episode.href)))
 				
 				assert episode.href != show.base_url
@@ -400,7 +414,7 @@ class InfoThread(threading.Thread):
 					best_links[ii] = b64decode(link).decode(self.encoding, 'ignore')		# We will save the direct link instead
 					
 				if len(best_links) == 0:													# If there are no links, record our failure for post processing
-					outfilename = 'failed/' + show.title + '--' + \
+					outfilename = FAIL_DIR + show.title + '--' + \
 									episode.getSafeName() + '.html'							# TODO: figure out how to write multi-line strings
 					self.messageQ.put(('Body','%s: %s does not have any usable links links.' % 
 					 					(show.title, episode.name)))

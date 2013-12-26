@@ -1,0 +1,14 @@
+TODO: Deploy on the PI!
+
+Feature: Non-command line GUI
+Feature: Save information in a .json file
+Feature: Download in background thread
+Feature: Download automatically when online
+
+TODO: Implement Download resuming
+
+TODO: fix URLRedirect					DONE
+TODO: Fix failed/ in infrastructure		DONE
+TODO: fix working directory				DONE
+TODO: Restore Stability					DONE
+

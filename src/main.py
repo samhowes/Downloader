@@ -10,6 +10,9 @@ import pydevd
 pydevd.settrace(host=None, stdoutToServer=False, stderrToServer=True, port=5678, suspend=False, trace_only_current_thread=False); import threading; threading.settrace(pydevd.GetGlobalDebugger().trace_dispatch)
 
 def main():
+	### First set up the working environment ###
+	create_infra([])
+	
 	################## First create all of our queues for communication ############
 	mainQ = queue.Queue()									# The queue that will start and join all threads							
 	interfaceQ = queue.Queue()								# The queue to push jobs to the User Interface Thread

@@ -4,9 +4,11 @@ import time
 from terminalsize import get_terminal_size
 from datetime import datetime
 
+RUN_DIR = "../run/"
+
 class Log():
 	def __init__(self):
-		self.log_dir = './log'
+		self.log_dir = RUN_DIR +'log'
 		self.error_log =  self.log_dir + '/error.txt'
 		self.success_log = self.log_dir + '/success.txt'
 		self.debug_log = self.log_dir + '/debug.txt'
@@ -45,15 +47,16 @@ class Log():
 
 
 def create_infra(folders):
-	parent_folder = 'Downloads'
-	failed_folder = 'failed'
-	if not os.path.exists(parent_folder):
-		os.mkdir(parent_folder)
+	"""Create the folder infrastructure for this program to run."""
+	work_dir = RUN_DIR			# The name of the working directory. A new directory that is a sibling of the current directory
+	download_dir = work_dir + 'Downloads/'
+	fail_dir = work_dir + 'failed/'
+	log_dir = work_dir + 'log/'
 	
-	if not os.path.exists(failed_folder):
-		os.mkdir(failed_folder)
+	for name in (work_dir, download_dir, fail_dir, log_dir):
+		if not os.path.exists(name):
+			os.mkdir(name)
 	
 	for folder in folders:
-		if not os.path.exists(parent_folder + '/' + folder):
-			os.mkdir(parent_folder + '/' + folder)
-
+		if not os.path.exists(download_dir + folder):
+			os.mkdir(download_dir + folder)
