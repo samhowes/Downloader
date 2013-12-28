@@ -1,3 +1,8 @@
+
+Cleanup tasks:
+TODO: Properly implement underscoring functions
+
+Normal notes:
 TODO: Deploy on the PI!
 
 Feature: Non-command line GUI
@@ -5,7 +10,9 @@ Feature: Save information in a .json file
 Feature: Download in background thread
 Feature: Download automatically when online
 
-TODO: Implement Download resuming
+TODO: Implement Download resuming		<-- Current task
+
+TODO: figure out git merging -> 		DONE: you must manually choose to delete a branch
 
 TODO: fix URLRedirect					DONE
 TODO: Fix failed/ in infrastructure		DONE

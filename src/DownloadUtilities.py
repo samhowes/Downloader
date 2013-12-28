@@ -314,13 +314,13 @@ class DownloadUtilities:
 		########## 	Navigate to the actual link for the download stream		##########
 		
 		self.out.addBody('Downloading video from: "' + stream_link + '"')
-		url_re = 'url=["\'](?P<href>[^"\']*)["\']'									# RegEx to extract an url from "url=''"
-		stream_re = "playlist:\s*['\"](?P<href>[^'\"]+)['\"]"						# RegEx to extract the "playlist: ''" entry that indicates the location of the stream
+		url_re = 'url=["\'](?P<href>[^"\']*)["\']'								# RegEx to extract an url from "url=''"
+		stream_re = "playlist:\s*['\"](?P<href>[^'\"]+)['\"]"					# RegEx to extract the "playlist: ''" entry that indicates the location of the stream
 		
-		home_url = re.search('http://[^/]+', stream_link).group()					# Get the base url from the link for future requests
+		home_url = re.search('http://[^/]+', stream_link).group()				# Get the base url from the link for future requests
 		
 		try:	
-			html = self.grabUrl(stream_link, 200)									###First Request: Grab the landing page for the video
+			html = self.grabUrl(stream_link, 200)								###First Request: Grab the landing page for the video
 		except UrlRedirected:
 			self.out.addBody('\rBad link found, trying the next one')
 			self.log.error('Bad Sockshare link found: %s' % (stream_link))
@@ -328,53 +328,53 @@ class DownloadUtilities:
 		
 		try:
 			soup = BeautifulSoup(html)
-			input_tag = soup.find('input',											# The server wants us to post back the hash found in the confirm form
+			input_tag = soup.find('input',										# The server wants us to post back the hash found in the confirm form
 							  attrs={'name':'hash', 'type':'hidden'})
 		
-			values = {'hash': input_tag['value'],									# Set up the POST body content for the next request
+			values = {'hash': input_tag['value'],								# Set up the POST body content for the next request
 						'confirm': 'Continue as Free User'}
 		except: 
 			pydevd.settrace()
 	
-		html = self.grabUrl(stream_link,200,values)									### Second request: Get the page with the video player
+		html = self.grabUrl(stream_link,200,values)								### Second request: Get the page with the video player
 		
 		try:
-			stream_href = re.search(stream_re, html).group('href')					# Extract the href for the /getfile.php? query that leads us to the MRSS feed
+			stream_href = re.search(stream_re, html).group('href')				# Extract the href for the /getfile.php? query that leads us to the MRSS feed
 		except:
 			pydevd.settrace()
 	
-		xml = self.grabUrl(home_url + stream_href, 200)								#### Third request: get the mrss feed and the URL of the .flv file
+		xml = self.grabUrl(home_url + stream_href, 200)							#### Third request: get the mrss feed and the URL of the .flv file
 		
-		real_stream_link = re.search(url_re, xml).group('href')						# extract the final URL for the .flv download
-		real_stream_link = HTMLParser.HTMLParser().unescape(real_stream_link)		# escape the HTML entities in the link
+		real_stream_link = re.search(url_re, xml).group('href')					# extract the final URL for the .flv download
+		real_stream_link = HTMLParser.HTMLParser().unescape(real_stream_link)	# escape the HTML entities in the link
 		
 		########## 		Start the actual Download 			##########
-		req = urllib.request.Request(real_stream_link, method='GET')				### Fourth request: get the source video file
+		req = urllib.request.Request(real_stream_link, method='GET')			### Fourth request: get the source video file
 		with urllib.request.urlopen(req) as response:								
-			assert response.status == 200											#TODO
+			assert response.status == 200										#TODO
 			self.out.addBody('\rVideo Size: %.1f MB.' % (int(response.getheader('Content-Length'))/1048576.))	# '\r' tells the addBody function to not ouput a blank line before this one
-			bytecount = 0															# Bytes downloaded
-			block_size = 4*1024														# Block transfer size
-			startTime = time.perf_counter()											# Time the download time
-			lastUpdate = None														# Last time the screen was updated
+			bytecount = 0														# Bytes downloaded
+			block_size = 4*1024													# Block transfer size
+			startTime = time.perf_counter()										# Time the download time
+			lastUpdate = None													# Last time the screen was updated
 			try:
-				out_stream = open(video_filename, 'wb')								# open our output file stream for writing raw binary
+				out_stream = open(video_filename, 'wb')							# open our output file stream for writing raw binary
 				assert out_stream is not None
 			except (OSError, IOError) as err:
 				sys.stderr.write('Unable to open for writing: %s' % str(err))
 				return False
 			########## 	Download the file! 				##########
-			while True:																# Download data and write to a local file
-				data_block = response.read(block_size)								# Get 'block_size' of data at a time
-				assert response.getheader('Content-Type') != 'text/html'			# TODO make sure we get xml, not html ??
+			while True:															# Download data and write to a local file
+				data_block = response.read(block_size)							# Get 'block_size' of data at a time
+				assert response.getheader('Content-Type') != 'text/html'		# TODO make sure we get xml, not html ??
 	
-				if len(data_block) == 0:											# make sure we are still downloading
+				if len(data_block) == 0:										# make sure we are still downloading
 					break
 				
-				bytecount += len(data_block)										# keep track of our total size
-				out_stream.write(data_block)										# write the output data to our local file
+				bytecount += len(data_block)									# keep track of our total size
+				out_stream.write(data_block)									# write the output data to our local file
 				
-				if lastUpdate == None or time.perf_counter() - lastUpdate > 1.: 	# update the screen once every second
+				if lastUpdate == None or time.perf_counter() - lastUpdate > 1.: # update the screen once every second
 					diff = time.perf_counter() - startTime
 					self.out.updateStatus("Bytes Downloaded: %.1f MB. Elapsed time: %dm %ds. Speed: %d kB/s %s"
 										% (bytecount/1048576, int(diff)/60, int(diff) % 60, bytecount/(1024*diff), ' '*10))
