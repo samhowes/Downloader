@@ -27,6 +27,10 @@ class InvalidStatusCode(Exception):
 class UrlRedirected(Exception):
 	pass
 
+class BadLink(Exception):
+	def __init__(self, message):
+		self.msg = message
+
 ##########		Main Class					##########
 class DownloadUtilities:
 	def __init__(self, out):
@@ -222,14 +226,21 @@ class DownloadUtilities:
 			data = None
 		
 		req = urllib.request.Request(url, data, method=method)
-		with urllib.request.urlopen(req) as response: 						# Get the url
-			if response.status != statuscode:								# Check to see if the status code is what we expect
-				raise InvalidStatusCode(response.status)
-			elif response.url != url:										# Check if we were redirected
-				raise UrlRedirected()
+		try:
+			with urllib.request.urlopen(req) as response: 						# Get the url
+				if response.status != statuscode:								# Check to see if the status code is what we expect
+					raise InvalidStatusCode(response.status)
+				elif response.url != url:										# Check if we were redirected
+					raise UrlRedirected()
+				else:
+					return response.read().decode(self.encoding, 'ignore')		# Otherwise, return the body of the response
+		
+		except urllib.error.HTTPError as err:								# Catch an HTTP Error and wrap it in our own exception
+			if err.code == 502:
+				raise BadLink('%d: %s' % (err.code, err.reason))
 			else:
-				return response.read().decode(self.encoding, 'ignore')		# Otherwise, return the body of the response
-	
+				raise err
+		
 	def generateDownloadQueue(self): #TODO Test this funciton
 		"""Generate a queue of episode links to download 
 		@return: unordered set of shows whose episodes have valid 
@@ -294,6 +305,12 @@ class DownloadUtilities:
 					try:
 						if self.do_download(stream_link, video_filename) == True:		# Attempt to download the link
 							break														# terminate if the download was successful
+					
+					except BadLink as err:
+						self.out.addBody('Bad link: %s' % (err.msg))
+						continue
+						
+						
 					except AlreadyDownloaded:
 						self.out.addBody('File "%s" already exists! Skipping download.' % (video_filename))
 						self.log.error('File "%s" already exists! Skipping download.' % (video_filename))
@@ -315,9 +332,16 @@ class DownloadUtilities:
 		
 		self.out.addBody('Downloading video from: "' + stream_link + '"')
 		url_re = 'url=["\'](?P<href>[^"\']*)["\']'								# RegEx to extract an url from "url=''"
-		stream_re = "playlist:\s*['\"](?P<href>[^'\"]+)['\"]"					# RegEx to extract the "playlist: ''" entry that indicates the location of the stream
+		stream_re = {'putlocker': "playlist:\s*['\"](?P<href>[^'\"]+)['\"]",					# RegEx to extract the "playlist: ''" entry that indicates the location of the stream
+					'sockshare':  "playlist:\s*['\"](?P<href>[^'\"]+)['\"]",
+					'promptfile': "clip:\s*\{\s*url:\s*['\"](?P<href>[^'\"]+)['\"]"}
 		
-		home_url = re.search('http://[^/]+', stream_link).group()				# Get the base url from the link for future requests
+		
+		domain = stream_link.split('.')[1]
+		if domain not in ('putlocker', 'sockshare', 'promptfile'):
+			raise ValueError('Domain "%s" can not yet be handled by Downloader!')
+		
+		home_url = re.search('http://[^/]+', stream_link).group()
 		
 		try:	
 			html = self.grabUrl(stream_link, 200)								###First Request: Grab the landing page for the video
@@ -325,28 +349,31 @@ class DownloadUtilities:
 			self.out.addBody('\rBad link found, trying the next one')
 			self.log.error('Bad Sockshare link found: %s' % (stream_link))
 			return False
-		
-		try:
-			soup = BeautifulSoup(html)
+	
+		soup = BeautifulSoup(html)
+		if domain in ('putlocker', 'sockshare'):
 			input_tag = soup.find('input',										# The server wants us to post back the hash found in the confirm form
-							  attrs={'name':'hash', 'type':'hidden'})
-		
+							attrs={'name':'hash', 'type':'hidden'})
+	
 			values = {'hash': input_tag['value'],								# Set up the POST body content for the next request
-						'confirm': 'Continue as Free User'}
-		except: 
-			pydevd.settrace()
-	
+					  'confirm': 'Continue as Free User'}
+		elif domain == 'promptfile':
+			input_tag = soup.find('input',										# The server wants us to post back the hash found in the confirm form
+							attrs={'name':'chash', 'type':'hidden'})
+			values = {'chash': input_tag['value']}								# Set up the POST body content for the next request
+					
 		html = self.grabUrl(stream_link,200,values)								### Second request: Get the page with the video player
+		stream_href = re.search(stream_re[domain], html).group('href')		# Extract the href for the /getfile.php? query that leads us to the MRSS feed
 		
-		try:
-			stream_href = re.search(stream_re, html).group('href')				# Extract the href for the /getfile.php? query that leads us to the MRSS feed
-		except:
-			pydevd.settrace()
-	
-		xml = self.grabUrl(home_url + stream_href, 200)							#### Third request: get the mrss feed and the URL of the .flv file
+		if domain in ('putlocker', 'sockshare'):	# These domains require an intermediate page
+				
+			xml = self.grabUrl(home_url + stream_href, 200)						#### Third request: get the mrss feed and the URL of the .flv file
+			
+			real_stream_link = re.search(url_re, xml).group('href')					# extract the final URL for the .flv download
+			real_stream_link = HTMLParser.HTMLParser().unescape(real_stream_link)	# escape the HTML entities in the link
 		
-		real_stream_link = re.search(url_re, xml).group('href')					# extract the final URL for the .flv download
-		real_stream_link = HTMLParser.HTMLParser().unescape(real_stream_link)	# escape the HTML entities in the link
+		elif domain == 'promptfile':				# Promptfile will get us to the file with a redirect
+			real_stream_link = stream_href	
 		
 		########## 		Start the actual Download 			##########
 		req = urllib.request.Request(real_stream_link, method='GET')			### Fourth request: get the source video file

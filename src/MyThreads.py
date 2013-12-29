@@ -250,7 +250,7 @@ class DownloaderThread(threading.Thread): 	#TODO: change DownloaderThread to be 
 		self.mainQ = mainQ					# The queue to get jobs from
 		self.resultsQ = resultsQ			# The queue to return results when we are done
 		
-	def run(self): #BOOKMARK
+	def run(self): 
 		"""Given a link to a video on Putlocker or Sockshare, download the video.
 		Return True on success, False otherwise."""
 		while True:
@@ -394,7 +394,7 @@ class InfoThread(threading.Thread):
 				episode.name = anchor.text.split(' - ')[-1].strip()							# Record the name: the text was 'Episode x	 - <name>\n' so we extract <name> and strip trailing whitespace
 				episode.href = show.base_url + anchor['href']								# Record the streaming page found
 					
-				self.messageQ.put(('Body', 'Finding download links for: "%s": "%s"$!, at "%s"' % 
+				self.messageQ.put(('Body', '\rFinding links for: "%s": "%s"$!, at "%s"' % 
 								(show.title, episode.name, episode.href)))
 				
 				assert episode.href != show.base_url
