@@ -236,7 +236,7 @@ class DownloadUtilities:
 					return response.read().decode(self.encoding, 'ignore')		# Otherwise, return the body of the response
 		
 		except urllib.error.HTTPError as err:								# Catch an HTTP Error and wrap it in our own exception
-			if err.code == 502:
+			if err.code in (502, 504):
 				raise BadLink('%d: %s' % (err.code, err.reason))
 			else:
 				raise err
