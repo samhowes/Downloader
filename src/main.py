@@ -7,7 +7,7 @@ import signal
 import time
 import queue
 import pydevd
-pydevd.settrace(host=None, stdoutToServer=False, stderrToServer=True, port=5678, suspend=False, trace_only_current_thread=False); import threading; threading.settrace(pydevd.GetGlobalDebugger().trace_dispatch)
+####pydevd.settrace(host=None, stdoutToServer=False, stderrToServer=True, port=5678, suspend=False, trace_only_current_thread=False); import threading; threading.settrace(pydevd.GetGlobalDebugger().trace_dispatch)
 
 def main():
 	### First set up the working environment ###
