@@ -8,6 +8,7 @@ import locale
 import urllib.request
 import pydevd
 
+from collections import OrderedDict as odict
 
 from bs4 import BeautifulSoup 								#Third party imports #TODO make this an included file, not a dependent library
 from OnlineTV import AlreadyDownloaded, Episode, TV_Show 	# Imports from this project
@@ -338,7 +339,7 @@ class DownloadUtilities:
 		
 		
 		domain = stream_link.split('.')[1]
-		if domain not in ('putlocker', 'sockshare', 'promptfile'):
+		if domain not in ('putlocker', 'sockshare', 'promptfile', 'nowvideo'):
 			raise ValueError('Domain "%s" can not yet be handled by Downloader!')
 		
 		home_url = re.search('http://[^/]+', stream_link).group()
@@ -347,38 +348,72 @@ class DownloadUtilities:
 			html = self.grabUrl(stream_link, 200)								###First Request: Grab the landing page for the video
 		except UrlRedirected:
 			self.out.addBody('\rBad link found, trying the next one')
-			self.log.error('Bad Sockshare link found: %s' % (stream_link))
+			self.log.error('Bad link found: %s' % (stream_link))
 			return False
 	
-		soup = BeautifulSoup(html)
-		if domain in ('putlocker', 'sockshare'):
-			input_tag = soup.find('input',										# The server wants us to post back the hash found in the confirm form
+					
+		if domain in ('putlocker', 'sockshare', 'promptfile'):					## These domains use a confirm page
+			soup = BeautifulSoup(html)											# The confirm page contains a button, and a 
+																				# hash to submit, scrape the page to find it
+			if domain == 'promptfile':
+				input_tag = soup.find('input',									# Scrape the hidden input tag
+								attrs={'name':'chash', 'type':'hidden'})
+				values = {'chash': input_tag['value']}							# Pack it for submision
+		
+			else:
+				input_tag = soup.find('input',									# Scrape the hidden input tag	
 							attrs={'name':'hash', 'type':'hidden'})
 	
-			values = {'hash': input_tag['value'],								# Set up the POST body content for the next request
-					  'confirm': 'Continue as Free User'}
-		elif domain == 'promptfile':
-			input_tag = soup.find('input',										# The server wants us to post back the hash found in the confirm form
-							attrs={'name':'chash', 'type':'hidden'})
-			values = {'chash': input_tag['value']}								# Set up the POST body content for the next request
+				values = {'hash': input_tag['value'],							# Pack it for submision	
+						  'confirm': 'Continue as Free User'}
 					
-		html = self.grabUrl(stream_link,200,values)								### Second request: Get the page with the video player
-		stream_href = re.search(stream_re[domain], html).group('href')		# Extract the href for the /getfile.php? query that leads us to the MRSS feed
+			html = self.grabUrl(stream_link,200,values)							### Second request: Submit and get the video page
+			stream_href = re.search(stream_re[domain], html).group('href')		# Scrape the video URL
 		
-		if domain in ('putlocker', 'sockshare'):	# These domains require an intermediate page
-				
-			xml = self.grabUrl(home_url + stream_href, 200)						#### Third request: get the mrss feed and the URL of the .flv file
+			if domain == 'promptfile':								
+				real_stream_link = stream_href									# Promptfile will get us to the file with a redirect
 			
-			real_stream_link = re.search(url_re, xml).group('href')					# extract the final URL for the .flv download
-			real_stream_link = HTMLParser.HTMLParser().unescape(real_stream_link)	# escape the HTML entities in the link
+			else:	
+				xml = self.grabUrl(home_url + stream_href, 200)					### Third request: Putlocker and Sockshare use an MRSS feed
+				
+				real_stream_link = re.search(url_re, xml).group('href')					# extract the final URL for the .flv download
+				real_stream_link = HTMLParser.HTMLParser().unescape(real_stream_link)	# escape the HTML entities in the link
 		
-		elif domain == 'promptfile':				# Promptfile will get us to the file with a redirect
-			real_stream_link = stream_href	
+		elif domain == 'nowvideo':												# Nowvideo brings us to the video page immediately
+			index = html.find('flashvars')										# The GET request uses values of the variable "flashvars"
+			if index == -1:
+				self.out.addBody('\rBad link: No flashvars found.')
+				return False
+			
+			sub = html[index:index+1200]										# only use the html we need for faster searching 
+			values = odict()
+			flashvar_re = r"flashvars\.%s\s*=\s*[\"'](?P<val>[^'\"])[\"']" 		#Regular expression to extract a "flashvars.%s" variable
+			
+			real_stream_link = re.search(flashvar_re % ('domain'), sub).group('val')	#Get the domain of the video
+			
+			## The GET for nowvideo retrieves the video immediately, 
+			# and takes the following parameters:
+			values['file']= re.search(flashvar_re % ('file'), sub).group('val')	# File code
+			values['user']= 'undefined'											# User name
+			values['numOfErrors'] = 0											# Don't know the purpose of this, but its used normally
+			values['cid'] = re.search(flashvar_re % ('cid'),sub).group('val')	# 'cid' is a parameter
+			values['key'] =	re.search(r"var\s+fkzd\s*=\s*[\"'](?P<val>[^'\"])[\"']", sub).group('val') # the 'key' comes from the var 'fkzd'
+			values['cid3']= re.search(flashvar_re % ('cid3'),sub).group('val')	# 'cid3' is also a parameter, I think the origin domain
+			values['pass']= 'undefined'											# Password	
+			
+			real_stream_link += 'api/player.api.php?'
+			real_stream_link += urllib.parse.urlencode(values)					# Add the query string
+			
+		else: 
+			raise ValueError('Domain "%s" can not yet be handled by Downloader!')
+		
 		
 		########## 		Start the actual Download 			##########
-		req = urllib.request.Request(real_stream_link, method='GET')			### Fourth request: get the source video file
+		req = urllib.request.Request(real_stream_link, method='GET')			### Final request: get the source video file
 		with urllib.request.urlopen(req) as response:								
-			assert response.status == 200										#TODO
+			if response.status != 200:
+				raise BadLink('Invalid status code for video URL: %d' % (response.status))
+			
 			self.out.addBody('\rVideo Size: %.1f MB.' % (int(response.getheader('Content-Length'))/1048576.))	# '\r' tells the addBody function to not ouput a blank line before this one
 			bytecount = 0														# Bytes downloaded
 			block_size = 4*1024													# Block transfer size
