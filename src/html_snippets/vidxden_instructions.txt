@@ -1,0 +1,15 @@
+Event Reconstruction:
+
+Step 1:
+	Download the form in request1.html
+
+Step 2:
+	Get the source file: 'challenge.js' from the link in the form
+	This will write a script tag into the original HTML. The src is _puzzle.js
+	
+Step 3:
+	Retrieve _puzzle.js from the src tag written by Challenge.
+	This script attempts to load several things: _challenge.js, then the captcha at /papi/media?c=.
+	
+Step4:
+	Retrieve _challenge.js, and the captcha. Solve the captcha, and submit.	 	

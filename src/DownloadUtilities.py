@@ -403,7 +403,11 @@ class DownloadUtilities:
 			
 			real_stream_link += 'api/player.api.php?'
 			real_stream_link += urllib.parse.urlencode(values)					# Add the query string
-			
+		elif domain == 'vidxden':
+			soup = BeautifulSoup(html)
+			input_tag = soup.find('input',										# Grab the captcha form, we'll instruct the user to load the page
+								attrs={'name':'chash', 'type':'hidden'})
+		
 		else: 
 			raise ValueError('Domain "%s" can not yet be handled by Downloader!')
 		
