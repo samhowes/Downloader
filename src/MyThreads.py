@@ -365,7 +365,7 @@ class InfoThread(threading.Thread):
 		
 	def run(self):
 		"""Process episodes and get a streaming link for each one"""
-		domain_source_re = r"document\.writeln\('(putlocker\.com|sockshare\.com|promptfile\.com)'\);"		#RegEx to extract the Host website for a stream on Primewire
+		domain_source_re = r"document\.writeln\('(putlocker\.com|sockshare\.com|promptfile\.com|nowvideo\.eu)'\);"		#RegEx to extract the Host website for a stream on Primewire
 		while True:
 			try:
 				show = self.mainQ.get(False)

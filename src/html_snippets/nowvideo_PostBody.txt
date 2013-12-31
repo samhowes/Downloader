@@ -1,0 +1,9 @@
+http://www.nowvideo.sx/api/player.api.php?
+file=owodlvji56g2w
+&user=undefined
+&cid3=primewire%2Eag
+&numOfErrors=0
+&cid=1
+&key=72%2E227%2E72%2E187%2D457dff75bb9096abddcb9a48b4a955a4
+&pass=undefined
+&cid2=12290
