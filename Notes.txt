@@ -1,5 +1,10 @@
 Bookmark: 
 
+BUGS:
+BUG: Mitigate "Server overloaded on Putlocker" 
+ 		- The HTML result raises a NoneType exception at line 445 in DownloadUtilities.py
+ 		- HTML is located in ServerOverloaded.html
+
 Cleanup tasks:
 TODO: Properly implement underscoring functions
 
