@@ -1,7 +1,7 @@
 # Version 3.0 Rewrite
 from GUI import GUI
-import pydevd
-pydevd.settrace(suspend=False, trace_only_current_thread=False)
+#import pydevd
+#pydevd.settrace(suspend=False, trace_only_current_thread=False)
 
 
 def main():
