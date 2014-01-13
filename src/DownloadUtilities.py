@@ -601,9 +601,3 @@ class DownloadUtilities:
 		self.elapsedTime = elapsedTime
 		return self.byteCount
 	
-	
-<<<<<<< HEAD
-	
-=======
-	
->>>>>>> v2.00 Tkinter GUI
