@@ -8,7 +8,13 @@ BUG: Redirect Loop mitigation
 
 Cleanup tasks:
 TODO: Properly implement underscoring functions
+<<<<<<< HEAD
 TODO: Remove Old interface files
+=======
+TODO: Move MyThreads into the proper locations i.e. not separated from the rest
+TODO: Remove Old interface files
+TODO: Find a way to preserve Interface Code
+>>>>>>> v2.00 Tkinter GUI
 TODO: Clean up info messages
 		- "Finding links for"  is too long
 		- "Downloading video from" should say what video it is downloading
@@ -29,11 +35,3 @@ TODO: Implement Captcha Mitigation
 		
 		
 TODO: Implement Download resuming		
-
-TODO: figure out git merging -> 		DONE: you must manually choose to delete a branch
-
-TODO: fix URLRedirect					DONE
-TODO: Fix failed/ in infrastructure		DONE
-TODO: fix working directory				DONE
-TODO: Restore Stability					DONE
-

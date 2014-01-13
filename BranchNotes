@@ -1,0 +1,9 @@
+Bookmark: Testing
+
+TODO: Test!
+
+DONE: Implement Exporting data to JSON
+
+DONE: Added dictionary contructor to both TV_Show, and Episode
+DONE: Added export_data, and import_data to Download utilities
+

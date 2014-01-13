@@ -5,6 +5,8 @@ import queue
 import re
 import sys
 import threading
+import datetime
+import time
 import locale
 import urllib.request
 from urllib import request
@@ -303,6 +305,67 @@ class DownloadUtilities:
 			self.shows[title].primeId = prime_titles[ii][2]					 				# record the index that primwire uses
 		return self.shows
 	
+	def import_data(self, importFile):
+		if not os.path.exists(importFile):
+			raise FileNotFoundError(importFile)
+		import json
+		with open(importFile, 'r') as instream:
+			data = json.load(instream)
+		try:
+			showlist = data['shows']
+			if type(showlist) != type(list()):
+				raise ValueError('Incorrect input file type!')
+			
+			newShows = odict()
+			
+			for show in showlist:
+				newShows[show['key']] = TV_Show(dictionary=show)
+				
+		except KeyError:
+			raise ValueError('Incorrect input file type!')
+		
+	def export_data(self, exportFile):
+		import json
+		if not os.path.exists(os.path.dirname(exportFile)):
+			raise ValueError('Invalid file name!')
+		# First convert our data into a dictionary
+		data = odict()
+		data['Date'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+		
+		showlist = list()
+		for show in self.shows:
+			episodeList = list()
+			for epi in show.episodes:
+				episodeList.append(odict([
+						('name',			epi.name),
+						('_safeName',		epi.getSafeName()),
+						('season',			epi.season),
+						('episode',			epi.episode),
+						('airdate',			epi.airdate),
+						('watched',			epi.watched),
+						('href',			epi.href),
+						('download_links',	epi.download_links),
+						]))
+			
+			showlist.append(odict([
+						('title',		show.title),
+						('_safeTitle',	show.getSateTitle())
+						('primewire',	show.primewire),
+						('href',		show.href),
+						('base_url',	show.base_url),
+						('rel_link',	show.rel_link),
+						('prmeId',		show.primeId),
+						('key',			show.key),
+						('unwatched',	show.unwatched),
+						('to_download',	show.to_download)
+						('episodes',	episodeList)
+						]))
+
+		data['Shows'] = showlist
+		with open(exportFile, 'w') as outstream:
+			outstream.write(json.dumps(data, indent=4))
+			outstream.write('\n')
+			
 	def grabUrl(self, url, statuscode, post=None):
 		""" Convenience function to download a URL
 		@param statuscode: The expected Server Response code 
@@ -539,4 +602,8 @@ class DownloadUtilities:
 		return self.byteCount
 	
 	
+<<<<<<< HEAD
 	
+=======
+	
+>>>>>>> v2.00 Tkinter GUI

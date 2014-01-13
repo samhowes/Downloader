@@ -3,6 +3,7 @@ from GUI import GUI
 import pydevd
 pydevd.settrace(suspend=False, trace_only_current_thread=False)
 
+
 def main():
 	GUI('Downloader').mainloop()
 
