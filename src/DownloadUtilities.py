@@ -593,7 +593,7 @@ class DownloadUtilities:
 		with open(RUN_DIR + 'completed.txt','a') as stream:
 			stream.write(title + '\n')
 		
-		self.callbackQ.put(tuple(self.parent.deleteProgressBox, tuple())) 		# Get rid of the progress box now that we're done with it
+		self.callbackQ.put((self.parent.deleteProgressBox, tuple())) 		# Get rid of the progress box now that we're done with it
 		
 		return True
 
