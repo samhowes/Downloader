@@ -1,0 +1,21 @@
+Bookmark: 
+
+Bugs:
+
+Accomplishment: Full functionality implemented and functional with a GUI
+ - Improved Thread communication
+ 
+Adoption of GUI Tasks:
+TODO: Find a way to copy and past from main display
+TODO: Implement Dummy GUI Functionality for use with just the command line
+TODO: Implement/adjust Log functionality
+
+
+DONE: Test Do_Download
+DONE: Implement a statusbar/current task display in the main GUI to replace out.updateStatus()
+
+XBUG: Change User-agent header for Putlocker mitigation
+DONE: Replace out.addBody() with print() statements	
+DONE: implement progressbar									
+DONE: Implement callbacks with progressbar and do_download
+DONE: Implemented redirection of StdOut

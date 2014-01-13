@@ -1,5 +1,5 @@
-from DownloadUtilities import DownloadUtilities, UrlRedirected
-from CustomUtilities import create_infra, Log
+import DownloadUtilities
+from CustomUtilities import Log
 from base64 import b64decode
 import curses
 import html.parser as HTMLParser
@@ -273,7 +273,7 @@ class DownloaderThread(threading.Thread): 	#TODO: change DownloaderThread to be 
 			
 			try:	
 				html = self.grabUrl(stream_link, 200)									###First Request: Grab the landing page for the video
-			except UrlRedirected:
+			except DownloadUtilities.UrlRedirected:
 				self.messageQ.add(('Body', '\rBad link found, trying the next one'))
 				self.messageQ.add(('Error','Bad Sockshare link found: %s' % (stream_link)))
 				self.resultsQ.put((stream_link, 'BadLink'))
@@ -373,8 +373,8 @@ class InfoThread(threading.Thread):
 			
 			except queue.Empty:
 				break 	
-			except UrlRedirected:
-				self.messageQ.put(('Error', 'Show %s homepage broken on Primewire' % (show.title)))
+			except DownloadUtilities.UrlRedirected:
+				print('Error:', 'Show %s homepage broken on Primewire' % (show.title))
 				continue				
 				
 			show_soup = BeautifulSoup(show_html)							  				# First extract the link for the episode that we want
@@ -388,14 +388,14 @@ class InfoThread(threading.Thread):
 				
 				anchor = episodes_container.find('a', href=targetHref) 						# Get the specific episode that we want
 				if anchor == None:
-					self.messageQ.put(('Error', 'Link "%s" not found on Primewire!' % (targetHref)))
+					print.put('Error', 'Link "%s" not found on Primewire!' % (targetHref))
 					continue
 				
 				episode.name = anchor.text.split(' - ')[-1].strip()							# Record the name: the text was 'Episode x	 - <name>\n' so we extract <name> and strip trailing whitespace
 				episode.href = show.base_url + anchor['href']								# Record the streaming page found
 					
-				self.messageQ.put(('Body', '\rFinding links for: "%s": "%s"$!, at "%s"' % 
-								(show.title, episode.name, episode.href)))
+				print('Finding links for: "%s": "%s"$!, at "%s"' % 
+								(show.title, episode.name, episode.href))
 				
 				assert episode.href != show.base_url
 				
@@ -416,10 +416,10 @@ class InfoThread(threading.Thread):
 				if len(best_links) == 0:													# If there are no links, record our failure for post processing
 					outfilename = FAIL_DIR + show.title + '--' + \
 									episode.getSafeName() + '.html'							# TODO: figure out how to write multi-line strings
-					self.messageQ.put(('Body','%s: %s does not have any usable links links.' % 
-					 					(show.title, episode.name)))
-					self.messageQ.put(('Error','%s: %s does not have any usable links.' % 
-					 					(show.title, episode.name)))
+					print('%s: %s does not have any usable links links.' % 
+					 					(show.title, episode.name))
+					#TODO: log as error
+					
 					with open(outfilename, 'w') as out:										# Write the output to the file
 						out.write(html)
 				else:

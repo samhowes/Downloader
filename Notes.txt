@@ -4,16 +4,21 @@ BUGS:
 BUG: Mitigate "Server overloaded on Putlocker" 
  		- The HTML result raises a NoneType exception at line 445 in DownloadUtilities.py
  		- HTML is located in ServerOverloaded.html
+BUG: Redirect Loop mitigation
 
 Cleanup tasks:
 TODO: Properly implement underscoring functions
+TODO: Remove Old interface files
+TODO: Clean up info messages
+		- "Finding links for"  is too long
+		- "Downloading video from" should say what video it is downloading
+		- ProgressBox should display the show name in addition to the SxxEyy
+		
 
 Normal notes:
 TODO: Deploy on the PI!
 
-BUG: Display the actual time completed in a human readable form.
-
-Feature: Non-command line GUI
+Version Feature: Non-command line GUI
 Feature: Save information in a .json file
 Feature: Download in background thread
 Feature: Download automatically when online

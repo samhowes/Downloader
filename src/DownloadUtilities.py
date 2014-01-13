@@ -1,22 +1,41 @@
-import html.parser as HTMLParser							# StdLib imports
+# StdLib imports
+import html.parser as HTMLParser							
 import os
 import queue
 import re
 import sys
-import time
+import threading
 import locale
 import urllib.request
-import pydevd
+from urllib import request
 
 from collections import OrderedDict as odict
 
-from bs4 import BeautifulSoup 								#Third party imports #TODO make this an included file, not a dependent library
-from OnlineTV import AlreadyDownloaded, Episode, TV_Show 	# Imports from this project
+#Third party imports
+from bs4 import BeautifulSoup
+
+# Imports from this project								 
+from CustomUtilities import create_infra
+from OnlineTV import AlreadyDownloaded, Episode, TV_Show 	
 import MyThreads					
+import GUI
+import GUITools
 
 RUN_DIR = "../run/"
 LOG_DIR = "../run/log/"
 DOWNLOAD_DIR = "../run/Downloads/"
+
+
+class DownloadMaster(threading.Thread):
+	def __init__(self, parent, callbackQ, name=None):
+		threading.Thread.__init__(self, name=name)
+		self.callbackQ = callbackQ
+		self.setDaemon(True)
+		self.parent = parent
+	
+	def run(self):
+		DownloadUtilities(self.parent, self.callbackQ).main()
+			
 
 ########## 		Exceptions 					##########
 class InvalidStatusCode(Exception):
@@ -32,22 +51,94 @@ class BadLink(Exception):
 	def __init__(self, message):
 		self.msg = message
 
+class MyRequest(urllib.request.Request):
+	stdRequest = urllib.request.Request
+	def __init__(self, *args, **kwargs):
+		self.stdRequest.__init__(self, *args, **kwargs)
+		self.add_header('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.6; rv:25.0) Gecko/20100101 Firefox/25.0')
+
 ##########		Main Class					##########
 class DownloadUtilities:
-	def __init__(self, out):
-		self.out = out
-		self.log = out.log
+	def __init__(self, parent, callbackQ):
+		self.parent = parent
+		self.callbackQ = callbackQ
 		self.encoding = locale.getpreferredencoding()
+		urllib.request.Request = MyRequest
+		#install a proxy for debugging
+		#proxy = request.build_opener(request.ProxyHandler({'http':'localhost:8080'}))
+		#request.install_opener(proxy)
+	
+	def main(self):
+		### First set up the working environment ###
+		create_infra([])
+		
+		########## Now gather all the data to prepare for downloading 	##########
+	
+		print('Initializing internal data structures...')
+			
+		shows = self.get_watchlist()								# First get all the shows into a data structure for processing
+		shows = self.get_download_links()							# Now match the shows from tv-links to primewire #MULTITHREAD
+		self.download_queue = self.generateDownloadQueue()				# Create a set of all the episodes we can download
+		
+		print('Checking Folders...')
+		folders = list()											# Make sure we have our folder heirarchy for each show
+		for show in shows.values():
+			folders.append(show.getSafeTitle())
+		
+		create_infra(folders)
+		
+		#export_watchlist(shows)									# TODO: export the watchlist and data structures for later use/resuming downloads
+		
+		########## 		Have the user select the download order 		##########
+		
+		self.download_order = list(self.download_queue)						# Convert the set to a list for ordering
+		choices = ['']*len(self.download_queue)
+		for ii, show in enumerate(self.download_order):						# Get the title of each show to display to the user
+			choices[ii] = show.title
+		
+		print('Starting Downloads')
+		#TODO out.updateStatus('Preparing to start downloading...')
+	
+		if self.callbackQ != None:									# Have the User choose which shows to download first
+			self.callbackQ.put(
+				(GUITools.RankPopup, ('Select the order to download...', choices, self.onRank))
+				)
+			self.event = threading.Event()
+			self.event.wait()										# Wait for the shows to be ranked
+
+		# Now actually download everything
+		self.download_episodes()# Do the actual downloading
+
+	def onRank(self, rankOrder):									# Executed by the GUIThread
+		'''Allow another thread to re-order the download
+		queue. This is in response to a user's selection
+		of their preference'''
+		newOrder = [None]*len(self.download_order)					# Will be the new self.download_order
+		unorderedShows = set(list(range(len(self.download_order))))	# Keep track of the shows we haven't ordered yet
+		for ii,index in enumerate(rankOrder):						
+			if index == None:
+				break
+			newOrder[ii] = self.download_order[index]				# permute each show in the correct order
+			unorderedShows.discard(index)							# Keep track of what we've done: rankOrder isn't a complete array
+		
+		for ii,index in zip(range(ii,len(newOrder)),unorderedShows):
+			newOrder[ii] = self.download_order[index]				# Fill in the rest of the queue with arbitrary values
+			
+		self.download_order = newOrder
+		self.event.set()											# Tell this thread to continue executing
 		
 	def get_watchlist(self):
 		"""Retrieve the watchlist from TVLinks"""
-		home_url = 'http://www.tvmuse.eu'		# The base URL that we will be making requests from
+		home_url = 'http://www.tvmuse.com'		# The base URL that we will be making requests from
 		watchlist_url = '/myaccount.html?zone=subscriptions' # the HREF to get to my watchlist
-		phpsess_re = '(PHPSESSID=[^;]+);'		# RegEx to extract a PHP Session Id from a cookie header
-		tvlsess_re = '(tvl_keepon=[^;]+);'		# RegEx to extract a tv-links session id from a cookie header
+		phpsess_re = '(PHPSESSID=[^;]+);'		# RegEx: extract PHP Session Id from cookie header
+		tvlsess_re = '(tvl_keepon=[^;]+);'		# RegEx: extract tv-links session id from cookie header
 	
-		self.out.addBody('\rLoading TVMuse Homepage...')
+		print('Loading TVMuse Homepage...')
 		with urllib.request.urlopen(home_url) as response:					### First request: get TVMuse Homepage for a PHP Session
+			assert response.code == 200
+			if response.url != home_url:									# Check if we were redirected because of a new domain
+				home_url = response.url
 			set_cookie = response.getheader('Set-Cookie')					# If we don't set our PHP Session, then it won't like our session
 			if set_cookie is not None:
 				phpsess = re.search(phpsess_re, set_cookie, re.IGNORECASE)	# Extract the session id from the Cookie the server gave us
@@ -61,7 +152,7 @@ class DownloadUtilities:
 				'passw': 'wed629'}  										# 'action=7&username=showes06@gmail.com&passw=wed629'
 		data = urllib.parse.urlencode(data).encode(self.encoding)				# first URLEncode the string, then encode to bytes with our encoding
 		
-		self.out.addBody('\rLogging in to TVMuse...')
+		print('Logging in to TVMuse...')
 		req = urllib.request.Request(home_url + '/ajax.php', data, headers, method='POST') ### Second request: log in to the server
 		with urllib.request.urlopen(req) as response:
 			xml = response.read().decode(self.encoding)							# the server should respond with xml this time
@@ -81,7 +172,7 @@ class DownloadUtilities:
 		
 		
 		headers = {'Cookie': phpsess+ '; ' + tvlsess}						# Set our session information
-		self.out.addBody('\rRetrieving the watchlist from TVMuse...')
+		print('Retrieving the watchlist from TVMuse...')
 		req = urllib.request.Request(home_url + watchlist_url, headers=headers, method='GET') ### Third request: get the watchlist page
 		with urllib.request.urlopen(req) as response:
 			html = response.read().decode(self.encoding, 'ignore')
@@ -90,7 +181,7 @@ class DownloadUtilities:
 			debugOut.write(html)
 		
 		### Now process our results and get show names ###
-		self.out.addBody('\rExtracting show names and information...')
+		print('Extracting show names and information...')
 		titles = list()	 			# a collection of titles that we'll build
 		self.shows = dict()	  		# the collection of shows that we find
 		soup = BeautifulSoup(html)
@@ -149,7 +240,7 @@ class DownloadUtilities:
 		username = 'showes06'; password = 'wed629'								# Login information for the POST body
 		
 		########## First retrieve user information from Primewire		##########
-		self.out.addBody('\rLogging in to Primewire...')
+		print('Logging in to Primewire...')
 		login = {'username': username, 'password': password, 'login_submit': 'Login'} 
 		data = urllib.parse.urlencode(login).encode(self.encoding)							# URL encode the string, then encode to bytes with our encoding
 		
@@ -159,7 +250,7 @@ class DownloadUtilities:
 			set_cookie = response.getheader('Set-Cookie')									# get the cookie for the session ID
 			assert set_cookie is not None
 		
-		self.out.addBody('\rRetrieving the watchlist from primewire')
+		print('Retrieving the watchlist from primewire')
 		headers = {'Cookie': re.search(phpsess_re, set_cookie, re.IGNORECASE).group(1)} 	# Keep our session id in the headers for future requests
 		req = urllib.request.Request(home_url + '/towatch' + '/' + username, headers=headers, method='GET') ### Second Request: get the primewire watchlist
 		with urllib.request.urlopen(req) as response:
@@ -167,7 +258,7 @@ class DownloadUtilities:
 			assert response.status == 200
 		
 		########## Now process the data and match tv-links shows to Primewire 	##########
-		self.out.addBody('\rLinking TVMuse to Primewire...')
+		print('Linking TVMuse to Primewire...')
 		soup = BeautifulSoup(html)
 		profile_div = soup.find('div', class_='regular_page profile_page')					# Get the main content holder <div> of the page
 		show_divs = profile_div.find_all('div', class_='index_item')						# It contains one show in each <div>
@@ -199,7 +290,7 @@ class DownloadUtilities:
 						maxwords = wordsincommon
 		
 				if maxwords == 0 or maxindex == -1:						 
-					self.log.error('Title %s found in Primewire watchlist but not in TVLinks Watchlist.' % (prime_titles[ii])[0])
+					#TODO self.log.error('Title %s found in Primewire watchlist but not in TVLinks Watchlist.' % (prime_titles[ii])[0])
 					unmatched_titles.append(title)											# record the missed title
 					continue																# don't continue processing this title
 				else:													 					# We should have found the title for primewire
@@ -237,10 +328,8 @@ class DownloadUtilities:
 					return response.read().decode(self.encoding, 'ignore')		# Otherwise, return the body of the response
 		
 		except urllib.error.HTTPError as err:								# Catch an HTTP Error and wrap it in our own exception
-			if err.code in (502, 504):
-				raise BadLink('%d: %s' % (err.code, err.reason))
-			else:
-				raise err
+			raise BadLink('%d: %s' % (err.code, err.reason))
+			
 		
 	def generateDownloadQueue(self): #TODO Test this funciton
 		"""Generate a queue of episode links to download 
@@ -255,7 +344,7 @@ class DownloadUtilities:
 		messageQ = queue.Queue()			# Queue for messages from the threads to output to the user
 		resultsQ = queue.Queue()			# Queue that the threads will place the results on 
 		
-		self.out.addBody('\rPopulating the Queue with download links...')
+		print('Populating the Queue with download links...')
 		for key in self.shows:														# Check each show for unwatched episodes
 			show = self.shows[key]
 			if show.href == None or len(show.unwatched) == 0:						# Check if we can download for this show
@@ -273,30 +362,18 @@ class DownloadUtilities:
 			if show != None:
 				self.shows[show.key] = show											# store the results
 				download_queue.add(self.shows[show.key])
-			
-			while not messageQ.empty():												# While there are messages to print from the threads
-				message = messageQ.get()
-				if len(message) != 2:
-					raise ValueError('Tuple from messageQ must be of length 2!')
-				
-				if message[0] == 'Error':											# Print the message in its appropriate form
-					self.log.error(message[1])
-				elif message[0] == 'Body':
-					self.out.addBody(message[1])
-				else:
-					raise ValueError('String "%s" is not a valid message for the messageQ!' % (message[0]))
-		
+					
 		jobQ.join()																	# Block until all threads have exited
 		return download_queue														# Return the set
 	
-	def download_episodes(self, download_queue):
+	def download_episodes(self):
 		""" Attempt to download all episodes in the queue 
 		MULTITHREAD"""
 		
-		self.out.addBody('\rDownloading the queue...')
+		print('Downloading the queue...')
 		video_format = DOWNLOAD_DIR + '{0}/S{1:>02}_E{2:>02}--{3}'							# Format string for the file name we will store
 		
-		for show in download_queue:														
+		for show in self.download_order:														
 			for ind in show.to_download:											# For each episode that has download links...
 				episode = show.episodes[ind]
 				video_filename = video_format.format(episode.show.getSafeTitle(),
@@ -308,17 +385,17 @@ class DownloadUtilities:
 							break														# terminate if the download was successful
 					
 					except BadLink as err:
-						self.out.addBody('Bad link: %s' % (err.msg))
+						print('Bad link: %s' % (err.msg))
 						continue
 						
 						
 					except AlreadyDownloaded:
-						self.out.addBody('File "%s" already exists! Skipping download.' % (video_filename))
-						self.log.error('File "%s" already exists! Skipping download.' % (video_filename))
+						print('File "%s" already exists! Skipping download.' % (video_filename))
+						#TODO self.log.error('File "%s" already exists! Skipping download.' % (video_filename))
 						break
 				
-		self.log.success('Downloaded entire queue!')
-		self.out.addBody('Downloaded entire queue! Exiting! :D')
+		#TODO self.log.success('Downloaded entire queue!')
+		print('Downloaded entire queue! Exiting! :D')
 	
 	def do_download(self, stream_link, video_filename):
 		"""Given a link to a video on Putlocker or Sockshare, download the video.
@@ -331,7 +408,7 @@ class DownloadUtilities:
 			raise AlreadyDownloaded()	
 		########## 	Navigate to the actual link for the download stream		##########
 		
-		self.out.addBody('Downloading video from: "' + stream_link + '"')
+		print('Downloading video from: "' + stream_link + '"')
 		url_re = 'url=["\'](?P<href>[^"\']*)["\']'								# RegEx to extract an url from "url=''"
 		stream_re = {'putlocker': "playlist:\s*['\"](?P<href>[^'\"]+)['\"]",					# RegEx to extract the "playlist: ''" entry that indicates the location of the stream
 					'sockshare':  "playlist:\s*['\"](?P<href>[^'\"]+)['\"]",
@@ -347,8 +424,8 @@ class DownloadUtilities:
 		try:	
 			html = self.grabUrl(stream_link, 200)								###First Request: Grab the landing page for the video
 		except UrlRedirected:
-			self.out.addBody('\rBad link found, trying the next one')
-			self.log.error('Bad link found: %s' % (stream_link))
+			print('Bad link found, trying the next one')
+			#TODO self.log.error('Bad link found: %s' % (stream_link))
 			return False
 	
 					
@@ -382,7 +459,7 @@ class DownloadUtilities:
 		elif domain == 'nowvideo':												# Nowvideo brings us to the video page immediately
 			index = html.find('flashvars')										# The GET request uses values of the variable "flashvars"
 			if index == -1:
-				self.out.addBody('\rBad link: No flashvars found.')
+				print('Bad link: No flashvars found.')
 				return False
 			
 			sub = html[index:index+1200]										# only use the html we need for faster searching 
@@ -418,17 +495,21 @@ class DownloadUtilities:
 			if response.status != 200:
 				raise BadLink('Invalid status code for video URL: %d' % (response.status))
 			
-			self.out.addBody('\rVideo Size: %.1f MB.' % (int(response.getheader('Content-Length'))/1048576.))	# '\r' tells the addBody function to not ouput a blank line before this one
-			bytecount = 0														# Bytes downloaded
+			self.downloadSize = int(response.getheader('Content-Length'))/1048576.0
+			
+			print('Video Size: %.1f MB.' % (self.downloadSize))
+			self.byteCount = 0														# Bytes downloaded
 			block_size = 4*1024													# Block transfer size
-			startTime = time.perf_counter()										# Time the download time
-			lastUpdate = None													# Last time the screen was updated
+		
 			try:
 				out_stream = open(video_filename, 'wb')							# open our output file stream for writing raw binary
 				assert out_stream is not None
 			except (OSError, IOError) as err:
 				sys.stderr.write('Unable to open for writing: %s' % str(err))
 				return False
+			title = video_filename[video_filename.rfind('/')+1:]
+			self.callbackQ.put((self.parent.newProgressBox, (title, self.downloadSize, self.onProgress)))
+			
 			########## 	Download the file! 				##########
 			while True:															# Download data and write to a local file
 				data_block = response.read(block_size)							# Get 'block_size' of data at a time
@@ -437,23 +518,25 @@ class DownloadUtilities:
 				if len(data_block) == 0:										# make sure we are still downloading
 					break
 				
-				bytecount += len(data_block)									# keep track of our total size
+				self.byteCount += len(data_block)									# keep track of our total size
 				out_stream.write(data_block)									# write the output data to our local file
 				
-				if lastUpdate == None or time.perf_counter() - lastUpdate > 1.: # update the screen once every second
-					diff = time.perf_counter() - startTime
-					self.out.updateStatus("Bytes Downloaded: %.1f MB. Elapsed time: %dm %ds. Speed: %d kB/s %s"
-										% (bytecount/1048576, int(diff)/60, int(diff) % 60, bytecount/(1024*diff), ' '*10))
-					lastUpdate = time.perf_counter()
-					
-		self.out.addBody('Download completed! Total time = %dm %ds.\n' % (diff/60, diff % 60))
+		seconds = self.elapsedTime % 60
+		minutes = (self.elapsedTime/60) % 60
+		hours 	= (self.elapsedTime/3600)			
+		print('%s download completed! Total time: %02d:%02d:%02d.' % (title, hours, minutes, seconds))
 		
-		message = 'Successfully downloaded file: %s from %s; total time = %d; total size = %.2f MB' % \
-					(video_filename, stream_link, time.time()-startTime, bytecount/1048576)
-		self.out.addBody(message)
-		self.log.success(message)
 		
 		with open(RUN_DIR + 'completed.txt','a') as stream:
-			stream.write(video_filename + '\n')
+			stream.write(title + '\n')
+		
+		self.callbackQ.put(tuple(self.parent.deleteProgressBox, tuple())) 		# Get rid of the progress box now that we're done with it
 		
 		return True
+
+	def onProgress(self, elapsedTime):
+		self.elapsedTime = elapsedTime
+		return self.byteCount
+	
+	
+	

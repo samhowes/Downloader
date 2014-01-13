@@ -45,6 +45,12 @@ class Log():
 			timestamp = datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
 			log.write(timestamp + '>> ' + message + '\n')
 
+def myprint(msg, end=None):
+	if end != None:
+		endline = str(end)
+	else:
+		endline = '\n'
+	
 
 def create_infra(folders):
 	"""Create the folder infrastructure for this program to run."""
